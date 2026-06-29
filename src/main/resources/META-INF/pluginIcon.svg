@@ -1,12 +1,64 @@
-<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M32.0845 7.94025V4H24.0203V7.9896H16.029V4H7.91553V7.94025H4V36H16.0044V32.0045C16.0058 30.9457 16.4274 29.9308 17.1766 29.1826C17.9258 28.4345 18.9412 28.0143 20 28.0143C21.0588 28.0143 22.0743 28.4345 22.8234 29.1826C23.5726 29.9308 23.9942 30.9457 23.9956 32.0045V36H36V7.94025H32.0845Z"
-          fill="url(#paint0_linear)"/>
-    <defs>
-        <linearGradient id="paint0_linear" x1="2.94192" y1="4.89955" x2="37.7772" y2="39.7345"
-                        gradientUnits="userSpaceOnUse">
-            <stop offset="0.15937" stop-color="#3BEA62"/>
-            <stop offset="0.5404" stop-color="#3C99CC"/>
-            <stop offset="0.93739" stop-color="#6B57FF"/>
-        </linearGradient>
-    </defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" aria-labelledby="title desc">
+    <title id="title">EN/RU Icon</title>
+    <rect
+            x="12"
+            y="12"
+            width="172"
+            height="178"
+            rx="12"
+            ry="12"
+            fill="#04AA80"
+            stroke="#FFFFFF"
+            stroke-width="6" />
+
+    <rect
+            x="172"
+            y="18"
+            width="8"
+            height="166"
+            rx="2"
+            fill="#028766" />
+
+    <!-- Document text lines -->
+    <rect x="28" y="55" width="68" height="4" rx="1" fill="#FFFFFF" opacity="0.85"/>
+    <rect x="28" y="68" width="95" height="4" rx="1" fill="#FFFFFF" opacity="0.85"/>
+    <rect x="28" y="81" width="72" height="4" rx="1" fill="#FFFFFF" opacity="0.85"/>
+    <rect x="28" y="94" width="88" height="4" rx="1" fill="#FFFFFF" opacity="0.85"/>
+
+    <rect x="28" y="115" width="68" height="4" rx="1" fill="#FFFFFF" opacity="0.85"/>
+    <rect x="28" y="128" width="95" height="4" rx="1" fill="#FFFFFF" opacity="0.85"/>
+    <rect x="28" y="141" width="55" height="4" rx="1" fill="#FFFFFF" opacity="0.85"/>
+
+    <text
+            x="52"
+            y="45"
+            font-family="Arial Black, sans-serif"
+            font-size="35"
+            font-weight="900"
+            fill="#FFFFFF"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            letter-spacing="-2px">EN</text>
+
+    <text
+            x="147"
+            y="167"
+            font-family="Arial Black, sans-serif"
+            font-size="35"
+            font-weight="900"
+            fill="#FFFFFF"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            letter-spacing="-2px">RU</text>
+
+    <path
+            d="M 87 56 L 110 56 L 107 48 L 127 65 L 107 82 L 110 74 L 87 74 Z"
+            fill="#FFFFFF"
+            stroke="#04AA80"
+            stroke-width="2" />
+    <path
+            d="M 142 123 L 119 123 L 122 115 L 102 132 L 122 149 L 119 141 L 142 141 Z"
+            fill="#FFFFFF"
+            stroke="#04AA80"
+            stroke-width="2" />
 </svg>
