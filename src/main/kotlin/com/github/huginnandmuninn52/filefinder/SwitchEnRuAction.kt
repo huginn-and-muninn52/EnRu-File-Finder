@@ -1,6 +1,8 @@
 package com.github.huginnandmuninn52.filefinder
 
 import com.intellij.diff.DiffManagerEx
+import com.intellij.diff.tools.util.DiffDataKeys
+import com.intellij.diff.tools.util.base.DiffViewerBase
 import com.intellij.diff.util.DiffUserDataKeys
 import com.intellij.diff.util.Side
 import com.intellij.ide.DataManager
@@ -33,10 +35,14 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Pair as IJPair
 import com.intellij.openapi.util.UserDataHolderBase
+import com.intellij.openapi.vcs.ProjectLevelVcsManager
 import com.intellij.openapi.vcs.VcsDataKeys
 import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.ChangeListManager
+import com.intellij.openapi.vcs.changes.ContentRevision
+import com.intellij.openapi.vcs.changes.CurrentContentRevision
 import com.intellij.openapi.vcs.changes.actions.diff.ChangeDiffRequestProducer
+import com.intellij.vcsUtil.VcsUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import java.awt.Component
@@ -60,9 +66,17 @@ class SwitchEnRuAction : AnAction() {
         // If the shortcut was triggered while focus was inside a VCS diff view,
         // handle it separately: open the diff for the counterpart en/ru file instead
         // of just opening the plain file.
+        // GitLab MR (and similar) diff tabs don't provide CURRENT_CHANGE, but the diff
+        // request itself carries the Change it was built from — fall back to it.
+        // Combined diff tabs (e.g. "Repository Diff" from the Git tool window's Log) don't
+        // provide DIFF_REQUEST either, but they do expose the focused block's viewer via
+        // DIFF_VIEWER, whose request carries the same CHANGE_KEY — fall back to that too.
         val currentChange = e.getData(VcsDataKeys.CURRENT_CHANGE)
+            ?: e.getData(DiffDataKeys.DIFF_REQUEST)?.getUserData(ChangeDiffRequestProducer.CHANGE_KEY)
+            ?: (e.getData(DiffDataKeys.DIFF_VIEWER) as? DiffViewerBase)
+                ?.request?.getUserData(ChangeDiffRequestProducer.CHANGE_KEY)
         if (currentChange != null) {
-            handleDiffContext(e, project)
+            handleDiffContext(e, project, currentChange)
             return
         }
 
@@ -353,9 +367,18 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
      * Detected via [VcsDataKeys.CURRENT_CHANGE] being non-null — confirmed empirically
      * to be the key IntelliJ populates for a single-file diff context, as opposed to
      * [VcsDataKeys.CHANGES] which is for multi-file selections in a changes list.
+     * GitLab Merge Request diff tabs don't provide CURRENT_CHANGE; for them the Change
+     * is taken from the diff request's [ChangeDiffRequestProducer.CHANGE_KEY] user data,
+     * and the counterpart diff is rebuilt at the same revisions
+     * (see [buildCounterpartRevisionChange]). Combined diff tabs ("Repository Diff"
+     * opened from the Git tool window's Log) provide neither CURRENT_CHANGE nor
+     * DIFF_REQUEST; there the Change comes from the focused block's viewer
+     * ([DiffDataKeys.DIFF_VIEWER]) via its request's CHANGE_KEY.
      *
-     * [CommonDataKeys.VIRTUAL_FILE] still resolves to the real underlying file even
-     * inside a diff tab, so we reuse it instead of extracting the path from the Change.
+     * [CommonDataKeys.VIRTUAL_FILE] resolves to the real underlying file inside a
+     * side-by-side diff viewer, but in the unified (onesided) viewer it is either null
+     * or a synthetic diff file, so we fall back to extracting the file from the Change
+     * itself when the context file is unusable.
      *
      * Caret line is preserved via [DiffUserDataKeys.SCROLL_TO_LINE], scrolling
      * [Side.RIGHT] (the "after"/working-copy pane, by VCS diff convention) to roughly
@@ -363,11 +386,18 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
      * scroll-offset math like the plain-file flow, just "scroll this line into view" —
      * and the Side.RIGHT assumption should be double-checked against real usage.
      */
-    private fun handleDiffContext(e: AnActionEvent, project: Project) {
-        val currentFile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: run {
-            showNotification("Could not determine current file from diff", NotificationType.WARNING)
-            return
-        }
+    private fun handleDiffContext(e: AnActionEvent, project: Project, change: Change) {
+        val contextFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
+            ?.takeIf { it.isInLocalFileSystem && !it.isDirectory }
+        val currentFile = contextFile
+            ?: change.virtualFile
+            ?: (change.afterRevision ?: change.beforeRevision)?.file?.let {
+                LocalFileSystem.getInstance().findFileByPath(it.path)
+            }
+            ?: run {
+                showNotification("Could not determine current file from diff", NotificationType.WARNING)
+                return
+            }
 
         // Capture caret position now, on EDT, before dropping into a background task.
         val currentEditor = e.getData(CommonDataKeys.EDITOR)
@@ -414,7 +444,10 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
         }
         val fem = FileEditorManager.getInstance(project)
         val tabsForProject = openedDiffTabs.getOrPut(project) { mutableMapOf() }
-        val cachedTab = tabsForProject[targetPath.toString()]
+        // Include the "after" revision in the cache key so a local-changes diff and an
+        // MR-revision diff of the same file don't reuse each other's tab.
+        val tabKey = targetPath.toString() + "@" + (change.afterRevision?.revisionNumber?.asString() ?: "local")
+        val cachedTab = tabsForProject[tabKey]
         if (cachedTab != null && fem.isFileOpen(cachedTab)) {
             fem.openFile(cachedTab, true)
             val targetEditors = mutableListOf<Editor>()
@@ -446,20 +479,35 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
             }
             return
         }
-        val counterpartChange: Change? = ChangeListManager.getInstance(project).getChange(targetVFile)
-        if (counterpartChange == null) {
-            showNotification("Counterpart file has no pending changes to diff", NotificationType.INFORMATION)
-            return
-        }
-
-        val producer = ChangeDiffRequestProducer.create(project, counterpartChange)
-        if (producer == null) {
-            showNotification("Could not build diff for counterpart file", NotificationType.WARNING)
-            return
-        }
-
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading diff") {
             override fun run(indicator: ProgressIndicator) {
+                // For local-changes diffs (after side is the working copy) look the counterpart
+                // change up in the change lists. For revision-based diffs (e.g. GitLab MR tabs)
+                // rebuild a Change for the counterpart file at the same VCS revisions instead.
+                // This must run in the background: building revision content may trigger a
+                // synchronous VCS repository lookup, which is forbidden on the EDT.
+                val isLocalDiff = change.afterRevision is CurrentContentRevision || change.beforeRevision == null
+                val counterpartChange: Change? = if (isLocalDiff) {
+                    ChangeListManager.getInstance(project).getChange(targetVFile)
+                } else {
+                    buildCounterpartRevisionChange(project, change, targetVFile)
+                        ?: ChangeListManager.getInstance(project).getChange(targetVFile)
+                }
+                if (counterpartChange == null) {
+                    ApplicationManager.getApplication().invokeLater {
+                        showNotification("Counterpart file has no pending changes to diff", NotificationType.INFORMATION)
+                    }
+                    return
+                }
+
+                val producer = ChangeDiffRequestProducer.create(project, counterpartChange)
+                if (producer == null) {
+                    ApplicationManager.getApplication().invokeLater {
+                        showNotification("Could not build diff for counterpart file", NotificationType.WARNING)
+                    }
+                    return
+                }
+
                 val request = try {
                     producer.process(UserDataHolderBase(), indicator)
                 } catch (ex: ProcessCanceledException) {
@@ -478,7 +526,7 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                 ApplicationManager.getApplication().invokeLater {
                     DiffManagerEx.getInstance().showDiffBuiltin(project, request)
                     fem.selectedEditor?.let { opened ->
-                        tabsForProject[targetPath.toString()] = opened.file
+                        tabsForProject[tabKey] = opened.file
                         val editors = mutableListOf<Editor>()
                         if (opened is TextEditor) {
                             editors.add(opened.editor)
@@ -494,6 +542,32 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                 }
             }
         })
+    }
+
+    /**
+     * Builds a [Change] for [targetVFile] pinned to the same VCS revisions as the
+     * source [change]. Used for revision-based diffs (GitLab Merge Request tabs,
+     * git-log diffs, etc.) where the counterpart has no local pending change.
+     * Uses the VCS-agnostic [com.intellij.openapi.vcs.diff.DiffProvider], so it works
+     * for any VCS that supports fetching file content by revision number.
+     *
+     * Must be called on a background thread: [com.intellij.openapi.vcs.diff.DiffProvider.createFileContent]
+     * may perform a synchronous repository lookup, which is forbidden on the EDT.
+     */
+    private fun buildCounterpartRevisionChange(project: Project, change: Change, targetVFile: VirtualFile): Change? {
+        val vcs = ProjectLevelVcsManager.getInstance(project).getVcsFor(targetVFile) ?: return null
+        val diffProvider = vcs.diffProvider ?: return null
+
+        fun counterpartRevision(rev: ContentRevision?): ContentRevision? = when (rev) {
+            null -> null
+            is CurrentContentRevision -> CurrentContentRevision(VcsUtil.getFilePath(targetVFile))
+            else -> diffProvider.createFileContent(rev.revisionNumber, targetVFile)
+        }
+
+        val before = counterpartRevision(change.beforeRevision)
+        val after = counterpartRevision(change.afterRevision)
+        if (before == null && after == null) return null
+        return Change(before, after)
     }
 
     private fun findEditorsInComponent(root: Component): List<Editor> {
