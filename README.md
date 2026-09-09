@@ -79,7 +79,7 @@ Run it before publishing or bumping the target IDE version.
 
 In CI, the plugin is verified with the
 [IntelliJ Platform Plugin Verifier GitHub Action](https://github.com/marketplace/actions/intellij-platform-plugin-verifier)
-(see `.github/workflows/compatibility.yml`).
+(see `.github/workflows/compatibility.yml`). The workflow runs on every push (to any branch) and on every pull request.
 
 ### Standalone `verifier-all.jar check-plugin`
 
