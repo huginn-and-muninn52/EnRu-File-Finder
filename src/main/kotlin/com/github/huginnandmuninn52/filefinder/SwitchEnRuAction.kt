@@ -1,8 +1,14 @@
 package com.github.huginnandmuninn52.filefinder
 
+import com.intellij.diff.DiffDialogHints
 import com.intellij.diff.DiffManagerEx
+import com.intellij.diff.chains.SimpleDiffRequestChain
+import com.intellij.diff.impl.DiffSettingsHolder
 import com.intellij.diff.tools.util.DiffDataKeys
 import com.intellij.diff.tools.util.base.DiffViewerBase
+import com.intellij.diff.tools.fragmented.UnifiedDiffTool
+import com.intellij.diff.tools.fragmented.UnifiedDiffViewer
+import com.intellij.diff.tools.simple.SimpleDiffTool
 import com.intellij.diff.util.DiffUserDataKeys
 import com.intellij.diff.util.Side
 import com.intellij.ide.DataManager
@@ -399,6 +405,16 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                 return
             }
 
+        // Capture the source viewer mode now, on EDT, so the counterpart diff can be
+        // opened in the same viewer (Unified vs Side-by-side). We must NOT use
+        // DiffUserDataKeysEx.FORCE_DIFF_TOOL for that: forcing restricts the processor
+        // to a single tool and hides the viewer-mode selector from the new tab's toolbar.
+        val preferredDiffTool = when (e.getData(DiffDataKeys.DIFF_VIEWER)) {
+            is UnifiedDiffViewer -> UnifiedDiffTool.INSTANCE
+            is DiffViewerBase -> SimpleDiffTool.INSTANCE
+            else -> null
+        }
+
         // Capture caret position now, on EDT, before dropping into a background task.
         val currentEditor = e.getData(CommonDataKeys.EDITOR)
         val enableBlame = isBlameEnabled(currentEditor)
@@ -522,9 +538,20 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                 if (currentLine != null) {
                     request.putUserData(DiffUserDataKeys.SCROLL_TO_LINE, IJPair.create(Side.RIGHT, currentLine))
                 }
+                val chain = SimpleDiffRequestChain(request)
 
                 ApplicationManager.getApplication().invokeLater {
-                    DiffManagerEx.getInstance().showDiffBuiltin(project, request)
+                    // Preselect the source viewer mode by moving its tool to the front of the
+                    // default-place tools order — the same thing the platform does when the
+                    // user toggles the mode manually. Unlike FORCE_DIFF_TOOL, this keeps the
+                    // Unified/Side-by-side selector available in the new tab.
+                    if (preferredDiffTool != null) {
+                        val settings = DiffSettingsHolder.DiffSettings.getSettings(null)
+                        val toolName = preferredDiffTool.javaClass.canonicalName
+                        settings.diffToolsOrder =
+                            listOf(toolName) + settings.diffToolsOrder.filter { it != toolName }
+                    }
+                    DiffManagerEx.getInstance().showDiffBuiltin(project, chain, DiffDialogHints.DEFAULT)
                     fem.selectedEditor?.let { opened ->
                         tabsForProject[tabKey] = opened.file
                         val editors = mutableListOf<Editor>()
