@@ -3,6 +3,7 @@ package com.github.huginnandmuninn52.filefinder
 import com.intellij.diff.DiffDialogHints
 import com.intellij.diff.DiffManagerEx
 import com.intellij.diff.chains.SimpleDiffRequestChain
+import com.intellij.diff.editor.ChainDiffVirtualFile
 import com.intellij.diff.impl.DiffSettingsHolder
 import com.intellij.diff.tools.util.DiffDataKeys
 import com.intellij.diff.tools.util.base.DiffViewerBase
@@ -26,12 +27,14 @@ import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.options.advanced.AdvancedSettings
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.LogicalPosition
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
+import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
@@ -303,7 +306,7 @@ class SwitchEnRuAction : AnAction() {
                     .getEditors(targetFileRef).filterIsInstance<TextEditor>().firstOrNull()
 targetTextEditor?.let { applyCaretAndScroll(it) }
                 applyBlameState(targetTextEditor?.editor, enableBlame)
-                FileEditorManager.getInstance(project).openFile(targetFileRef, true)
+                openTargetFile(project, targetFileRef)
             } else {
                 // File is not yet open — wait for the fileOpened event
                 val connection = project.messageBus.connect()
@@ -317,7 +320,7 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                         applyBlameState(targetTextEditor?.editor, enableBlame)
                     }
                 })
-                FileEditorManager.getInstance(project).openFile(targetFileRef, true)
+                openTargetFile(project, targetFileRef)
             }
 
             if (!wasTargetOpen) {
@@ -511,7 +514,7 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                 }
                 if (counterpartChange == null) {
                     ApplicationManager.getApplication().invokeLater {
-                        showNotification("Counterpart file has no pending changes to diff", NotificationType.INFORMATION)
+                        showNotification("Counterpart file has no pending changes to diff", NotificationType.WARNING)
                     }
                     return
                 }
@@ -551,9 +554,37 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                         settings.diffToolsOrder =
                             listOf(toolName) + settings.diffToolsOrder.filter { it != toolName }
                     }
-                    DiffManagerEx.getInstance().showDiffBuiltin(project, chain, DiffDialogHints.DEFAULT)
+                    // Honor the "Open new file: In right split" setting for diff tabs too:
+                    // a diff tab is backed by a ChainDiffVirtualFile, which can be opened
+                    // in an editor split just like a plain file. Only applicable when diffs
+                    // open as editor tabs (not in a separate window) — same check the
+                    // internal DiffEditorTabFilesUtil.isDiffInEditor performs, done via the
+                    // public AdvancedSettings API to stay off internal classes.
+                    val splitters =
+                        if (EnRuFileFinderSettings.getInstance().openMode == EnRuFileFinderSettings.OpenMode.RIGHT_SPLIT &&
+                            AdvancedSettings.getBoolean("show.diff.as.editor.tab")
+                        ) FileEditorManagerEx.getInstanceEx(project).splitters else null
+                    var openedInSplit = false
+                    if (splitters != null) {
+                        val diffFile = ChainDiffVirtualFile(chain, targetVFile.name)
+                        // openInRightSplit(file, requestFocus) is the same public API the
+                        // platform's "Open in Right Split" action uses; unlike
+                        // EditorWindow.split it is binary-stable across IDE versions.
+                        if (splitters.openInRightSplit(diffFile, true) != null) {
+                            // Cache the diff file directly: fem.selectedEditor may still point
+                            // at the source window right after the split, which would leave the
+                            // tab uncached and make every press open yet another split.
+                            tabsForProject[tabKey] = diffFile
+                            openedInSplit = true
+                        }
+                    }
+                    if (!openedInSplit) {
+                        DiffManagerEx.getInstance().showDiffBuiltin(project, chain, DiffDialogHints.DEFAULT)
+                    }
                     fem.selectedEditor?.let { opened ->
-                        tabsForProject[tabKey] = opened.file
+                        if (!openedInSplit) {
+                            tabsForProject[tabKey] = opened.file
+                        }
                         val editors = mutableListOf<Editor>()
                         if (opened is TextEditor) {
                             editors.add(opened.editor)
@@ -595,6 +626,29 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
         val after = counterpartRevision(change.afterRevision)
         if (before == null && after == null) return null
         return Change(before, after)
+    }
+
+    /**
+     * Opens [file] according to the "Open new file" setting
+     * (Settings | Tools | En-Ru File Finder): either as a regular tab in the
+     * current tab group, or in a right split of the current editor window —
+     * the same thing the "Split Right" action does. If the file is already
+     * open somewhere, it is simply focused.
+     */
+    private fun openTargetFile(project: Project, file: VirtualFile) {
+        val fem = FileEditorManager.getInstance(project)
+        if (EnRuFileFinderSettings.getInstance().openMode == EnRuFileFinderSettings.OpenMode.RIGHT_SPLIT &&
+            !fem.isFileOpen(file)
+        ) {
+            // Public, binary-stable equivalent of "Split Right" (used by the platform's
+            // "Open in Right Split" action); EditorWindow.split is avoided because its
+            // JVM signature changes between IDE versions.
+            val window = FileEditorManagerEx.getInstanceEx(project).splitters.openInRightSplit(file, true)
+            if (window != null) {
+                return
+            }
+        }
+        fem.openFile(file, true)
     }
 
     private fun findEditorsInComponent(root: Component): List<Editor> {
@@ -640,8 +694,11 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
     }
 
     private fun showNotification(content: String, type: NotificationType) {
+        // Regular (INFORMATION) messages and warnings/errors go to separate notification
+        // groups, so users can disable the regular ones but keep warnings/errors.
+        val groupId = if (type == NotificationType.INFORMATION) "En-Ru File Finder Regular" else "En-Ru File Finder Problems"
         Notifications.Bus.notify(
-            Notification("SwitchEnRu", "Switch en/ru", content, type)
+            Notification(groupId, "Switch en/ru", content, type)
         )
     }
 }
