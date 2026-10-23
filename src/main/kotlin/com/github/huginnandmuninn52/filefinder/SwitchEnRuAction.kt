@@ -219,7 +219,10 @@ class SwitchEnRuAction : AnAction() {
             }
             val enableBlame = isBlameEnabled(currentTextEditor?.editor)
 
-            FileEditorManager.getInstance(project).openFileEditor(OpenFileDescriptor(project, currentFile), true)
+            // OpenFileDescriptor.navigate is the open-and-focus API that is not deprecated in
+            // either 2025.2 or 2026.3; FileEditorManager.openFileEditor/openEditor are deprecated
+            // in 2026.3 and their replacements (requestOpenEditor) don't exist in 2025.2.
+            OpenFileDescriptor(project, currentFile).navigate(true)
             if (!wasSourceOpen) {
                 totalOpened++
             }
@@ -469,7 +472,7 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
         val tabKey = targetPath.toString() + "@" + (change.afterRevision?.revisionNumber?.asString() ?: "local")
         val cachedTab = tabsForProject[tabKey]
         if (cachedTab != null && fem.isFileOpen(cachedTab)) {
-            fem.openFileEditor(OpenFileDescriptor(project, cachedTab), true)
+            OpenFileDescriptor(project, cachedTab).navigate(true)
             val targetEditors = mutableListOf<Editor>()
             for (cachedEditor in fem.getEditors(cachedTab)) {
                 if (cachedEditor is TextEditor) {
@@ -649,7 +652,7 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                 return
             }
         }
-        fem.openFileEditor(OpenFileDescriptor(project, file), true)
+        OpenFileDescriptor(project, file).navigate(true)
     }
 
     private fun findEditorsInComponent(root: Component): List<Editor> {
