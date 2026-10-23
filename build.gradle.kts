@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.github.huginnandmuninn52"
-version = "1.4.6"
+version = "1.4.7"
 
 repositories {
     mavenCentral()
@@ -16,7 +16,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        intellijIdea("2026.2.2")
+        intellijIdea("2025.2.4")
         // VCS module is needed to open diffs
         bundledPlugin("com.intellij.modules.vcs")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
@@ -29,6 +29,13 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = "252"
+        }
+    }
+    
+    // For verifyPlugin gradle task
+    pluginVerification {
+        ides {
+            recommended()
         }
     }
 }
