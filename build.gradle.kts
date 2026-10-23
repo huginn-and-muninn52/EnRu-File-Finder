@@ -1,7 +1,7 @@
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.4.20"
-    id("org.jetbrains.intellij.platform") version "2.11.0"
+    id("org.jetbrains.intellij.platform") version "2.17.0"
 }
 
 group = "com.github.huginnandmuninn52"
@@ -35,20 +35,20 @@ intellijPlatform {
     // For verifyPlugin gradle task
     pluginVerification {
         ides {
-            recommended()
+            ide("2025.2.4")
         }
     }
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
 kotlin {
     jvmToolchain(25)
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget("25"))
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }

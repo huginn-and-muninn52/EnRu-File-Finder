@@ -34,6 +34,7 @@ import com.intellij.openapi.editor.LogicalPosition
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.progress.ProcessCanceledException
@@ -218,7 +219,7 @@ class SwitchEnRuAction : AnAction() {
             }
             val enableBlame = isBlameEnabled(currentTextEditor?.editor)
 
-            FileEditorManager.getInstance(project).openFile(currentFile, true)
+            FileEditorManager.getInstance(project).openFileEditor(OpenFileDescriptor(project, currentFile), true)
             if (!wasSourceOpen) {
                 totalOpened++
             }
@@ -468,7 +469,7 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
         val tabKey = targetPath.toString() + "@" + (change.afterRevision?.revisionNumber?.asString() ?: "local")
         val cachedTab = tabsForProject[tabKey]
         if (cachedTab != null && fem.isFileOpen(cachedTab)) {
-            fem.openFile(cachedTab, true)
+            fem.openFileEditor(OpenFileDescriptor(project, cachedTab), true)
             val targetEditors = mutableListOf<Editor>()
             for (cachedEditor in fem.getEditors(cachedTab)) {
                 if (cachedEditor is TextEditor) {
@@ -648,7 +649,7 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
                 return
             }
         }
-        fem.openFile(file, true)
+        fem.openFileEditor(OpenFileDescriptor(project, file), true)
     }
 
     private fun findEditorsInComponent(root: Component): List<Editor> {
