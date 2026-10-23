@@ -27,6 +27,8 @@ import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.options.advanced.AdvancedSettings
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
@@ -58,14 +60,18 @@ import com.intellij.openapi.vfs.VirtualFile
 import java.awt.Component
 import java.nio.file.Paths
 
-class SwitchEnRuAction : AnAction() {
+/**
+ * Tracks diff tabs our shortcut has opened, keyed by the real target file's path —
+ * so repeated presses reuse/focus an existing tab instead of endlessly creating new
+ * ones. A project-level light service (rather than a static map keyed by Project)
+ * so it is released with the project and on dynamic plugin unload.
+ */
+@Service(Service.Level.PROJECT)
+class OpenedDiffTabs {
+    val tabs = mutableMapOf<String, VirtualFile>()
+}
 
-    companion object {
-        // Tracks diff tabs our shortcut has opened, per project, keyed by the real
-        // target file's path — so repeated presses reuse/focus an existing tab
-        // instead of endlessly creating new ones.
-        private val openedDiffTabs = mutableMapOf<Project, MutableMap<String, VirtualFile>>()
-    }
+class SwitchEnRuAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: run {
@@ -466,7 +472,7 @@ targetTextEditor?.let { applyCaretAndScroll(it) }
             return
         }
         val fem = FileEditorManager.getInstance(project)
-        val tabsForProject = openedDiffTabs.getOrPut(project) { mutableMapOf() }
+        val tabsForProject = project.service<OpenedDiffTabs>().tabs
         // Include the "after" revision in the cache key so a local-changes diff and an
         // MR-revision diff of the same file don't reuse each other's tab.
         val tabKey = targetPath.toString() + "@" + (change.afterRevision?.revisionNumber?.asString() ?: "local")
