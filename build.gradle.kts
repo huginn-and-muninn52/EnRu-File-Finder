@@ -35,7 +35,7 @@ intellijPlatform {
     // For verifyPlugin gradle task
     pluginVerification {
         ides {
-            ide("2025.2.4")
+            create("IU", "2025.2.4")
         }
     }
 }
@@ -47,7 +47,7 @@ java {
 }
 
 kotlin {
-    jvmToolchain(25)
+    jvmToolchain(21)
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
