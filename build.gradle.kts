@@ -18,7 +18,7 @@ dependencies {
     intellijPlatform {
         intellijIdea("2025.2.4")
         // VCS module is needed to open diffs
-        bundledPlugin("com.intellij.modules.vcs")
+        bundledModule("com.intellij.modules.vcs")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
     // Make the plugin weight 10 KB instead of 1.7 MB
