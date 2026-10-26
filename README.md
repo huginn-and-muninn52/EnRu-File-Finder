@@ -1,3 +1,8 @@
+![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/32476-en-ru-file-finder?style=plastic&logo=kotlin&labelColor=%23FFE4C4&color=green)
+
+![JetBrains Plugin Downloads](https://img.shields.io/jetbrains/plugin/d/32476-en-ru-file-finder?style=plastic&labelColor=%23FFE4C4&color=green)
+
+
 # En-Ru File Finder
 
 An IntelliJ Platform plugin that instantly switches between the `en` and `ru` language folders for the same file,
