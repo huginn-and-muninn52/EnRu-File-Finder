@@ -1,6 +1,6 @@
-![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/32476-en-ru-file-finder?style=plastic&logo=kotlin&labelColor=%23FFE4C4&color=green)
+![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/32476-en-ru-file-finder?style=plastic&logo=kotlin&labelColor=%23FFE4C4&color=green&link=https%3A%2F%2Fplugins.jetbrains.com%2Fplugin%2F32476-en-ru-file-finder)
 
-![JetBrains Plugin Downloads](https://img.shields.io/jetbrains/plugin/d/32476-en-ru-file-finder?style=plastic&labelColor=%23FFE4C4&color=green)
+![JetBrains Plugin Downloads](https://img.shields.io/jetbrains/plugin/d/32476-en-ru-file-finder?style=plastic&labelColor=%23FFE4C4&color=green&link=https%3A%2F%2Fplugins.jetbrains.com%2Fplugin%2F32476-en-ru-file-finder)
 
 
 # En-Ru File Finder
